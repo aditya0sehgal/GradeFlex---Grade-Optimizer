@@ -127,9 +127,14 @@ def login():
         password = request.json['password'].encode('utf-8')
         
         user = User.query.filter_by(username=username).first()
-        if username == "timielinski" and bcrypt.checkpw(password, user.password):
-            session['professor'] = True  # Save user ID in session
-            return jsonify({"message": "Professor login successful", "redirect": "/flexigrade"}), 200
+        if username == "timielinski":
+            if user and bcrypt.checkpw(password, user.password):
+                session['professor'] = True  # Save user ID in session
+                return jsonify({"message": "Professor login successful", "redirect": "/flexigrade"}), 200
+            elif user:
+                return jsonify({"error": "Incorrect password"}), 401
+            else:
+                return jsonify({"error": "User not found"}), 404
 
         else:
             if user and bcrypt.checkpw(password, user.password):
