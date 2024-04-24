@@ -1,12 +1,14 @@
 import pandas as pd
 
+# make this automated
+#   1. add a route to home.py to redirect here.
+#   2. update naming conventions to be standard.
+
 # Load your dataset
-file_path = './datasets/allgrades-unformatted.csv'  # Update this to the path of your file
+file_path = './datasets/2024-04-24T0106_Grades-01_198_142_01_DATA_101.csv'  # Update this to the path of your file
 df = pd.read_csv(file_path)
 
 df = df.fillna(0)
-print(df.head(5))
-
 df = df.iloc[1:]
 
 # Find all quiz columns
@@ -14,8 +16,9 @@ quiz_columns = [col for col in df.columns if 'Quiz' in col and 'LOA' not in col 
 
 for quiz_col in quiz_columns:
     split = quiz_col.split(" ")
+    print(split)
     # Find LOA-Quiz column corresponding to the Quiz column
-    loa_quiz_col = [col for col in df.columns if (f'LOA-{split[0]}{str(split[1])}' in col or f'LOA-{split[0]} {str(split[1])}' in col)]
+    loa_quiz_col = [col for col in df.columns if (f'LOA-{split[0]}{str(split[1])} ' in col or f'LOA-{split[0]} {str(split[1])} ' in col)]
     print(loa_quiz_col)
     if loa_quiz_col:
         loa_quiz_col = loa_quiz_col[0]  # There should be only one matching column
@@ -52,6 +55,7 @@ for col in df_filtered.columns[2:]:  # Skip 'Student' and 'SIS Login ID' columns
     df_filtered.loc[:, col] = df_filtered[col] / float(points_possible[col])
 
 df_filtered = df_filtered.loc[:, ~df_filtered.columns.str.contains('LOA')]
+df_filtered = df_filtered.loc[:, ~df_filtered.columns.str.contains('Homework 4')]
 
 # Remove the 'Points Possible' row to leave only student data
 df_final = df_filtered.drop(1).reset_index(drop=True)
