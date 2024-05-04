@@ -78,8 +78,7 @@ def convert_grades(filename):
         # Step 2: Convert grades to decimals
         # Find the row with 'Points Possible' (assuming it's the second row)
         points_possible = df_filtered.iloc[0]
-        print(df_filtered.head(5))
-        print(points_possible)
+
         # Convert grades, treating 'N/A' as 0
         for col in df_filtered.columns[2:]:  # Skip 'Student' and 'SIS Login ID' columns
             # Convert all 'N/A' to 0, coerce any errors, fill NaN with 0, and convert to float
@@ -89,7 +88,6 @@ def convert_grades(filename):
             df_filtered.loc[:, col] = df_filtered[col] / float(points_possible[col])
 
         df_filtered = df_filtered.loc[:, ~df_filtered.columns.str.contains('LOA')]
-        df_filtered = df_filtered.loc[:, ~df_filtered.columns.str.contains('Homework 4')]
 
         # Remove the 'Points Possible' row to leave only student data
         df_final = df_filtered.drop(1).reset_index(drop=True)
@@ -140,15 +138,9 @@ def loadgrades():
             gradesDF = pd.read_csv(os.path.join(os.getcwd() + '/datasets/allgrades.csv'))
         grade_netid = gradesDF[gradesDF['SIS Login ID'] == netid]
 
-        # Print statements for debugging, can be removed or commented out in production
-        print(grade_netid)
         grade_netid_quiz = [col for col in grade_netid.columns if 'quiz' in col.lower()]
         grade_netid_heavy = [col for col in grade_netid.columns if 'heavy' in col.lower()]
-        grade_netid_medium = [col for col in grade_netid.columns if ('quiz' not in col.lower() and 'heavy' not in col.lower())][2:]
-
-        print(grade_netid_quiz)
-        print(grade_netid_heavy)
-        print(grade_netid_medium)
+        grade_netid_medium = [col for col in grade_netid.columns if ('quiz' not in col.lower() and 'heavy' not in col.lower())][2:]       
         
         filtered_json = grade_netid.to_json(orient='records')
         return render_template('flexigrade.html', grades=filtered_json, quizzes=grade_netid_quiz, medium=grade_netid_medium, heavy=grade_netid_heavy)
@@ -227,7 +219,6 @@ def register():
             return jsonify({"message": "User registered successfully"}), 201
         except Exception as e:
             db.session.rollback()
-            print(e)
             return jsonify({"message": "An error occurred."+'\n'+"A user with this username already exists."+'\nOR - '+str(e.args)}), 500
     if request.method == "GET":
         return render_template('register.html')
