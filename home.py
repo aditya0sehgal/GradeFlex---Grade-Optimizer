@@ -21,6 +21,7 @@ app.config['ALLOWED_EXTENSIONS'] = {'csv'}
 
 # Initialize SQLAlchemy with Flask app settings
 db = SQLAlchemy(app)
+course_weight_mapping_dict = {}
 
 # Route for the home page, which renders an HTML template
 @app.route("/", methods=['GET'])
@@ -30,6 +31,29 @@ def home():
 # Function to check allowed file types
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+# Function to fetch and process weight mappings
+def get_weight_mappings():
+    sheet_id = '1iIr0y8uHw7GK_SpT1IcgfrXf8kO0FKGzgDla4mEiI1k'
+    sheet_name = 'WeightMappings'
+    url = f'https://docs.google.com/spreadsheets/d/{sheet_id}/gviz/tq?tqx=out:csv&sheet={sheet_name}'
+
+    weight_mappings = pd.read_csv(url)
+    weight_mappings.fillna('', inplace=True)
+    weight_mappings = weight_mappings.iloc[:, :4]
+
+    # Initialize an empty dictionary
+    course_section_dict = {}
+
+    # Group the DataFrame by 'Full Course Code' and 'Section'
+    grouped = weight_mappings.groupby(['Full Course Code', 'Section'])
+
+    # Iterate through each group
+    for (course, section), group in grouped:
+        weight_dict = dict(zip(group['Type'], group['Weight Multiplier']))
+        course_section_dict[course + " - " + str(section)] = weight_dict
+
+    return course_section_dict
 
 # Route for uploading and converting datasets
 @app.route('/upload', methods=['GET', 'POST'])
@@ -114,20 +138,45 @@ def flexicheck():
 # Route for professors to view grades based on student netid
 @app.route('/profview', methods=['POST'])
 def loaddemogrades():
+    global course_weight_mapping_dict
+    
     netid = request.form['netid']
     if os.path.isfile(os.path.join(os.getcwd() + '/datasets/allgrades.csv')):
         gradesDF = pd.read_csv(os.path.join(os.getcwd() + '/datasets/allgrades.csv'))
 
+    if(netid not in gradesDF['SIS Login ID'].values):
+        return render_template('nonetid.html', message = "NetID not found in the dataset for this class")
     grade_netid = gradesDF[gradesDF['SIS Login ID'] == netid]
     
-    # Filtering columns related to quizzes, heavy assignments, and other types
-    grade_netid_quiz = [col for col in grade_netid.columns if 'quiz' in col.lower()]
-    grade_netid_heavy = [col for col in grade_netid.columns if 'heavy' in col.lower()]
-    grade_netid_medium = [col for col in grade_netid.columns if ('quiz' not in col.lower() and 'heavy' not in col.lower())][2:]
 
-    # Converting the filtered data to JSON format for use in the frontend
+    try:
+        course_weight_mapping_dict = get_weight_mappings()
+    except Exception as e:
+        return jsonify({"message": f"There was an error: {e}"}), 500
+
+    # Replace to generalize it to get the weight mapping for that particular course.
+    # This could maybe be done in the get_weight_mappings function itself.
+    # By passing the course code as an argument.
+    weight_mapping = course_weight_mapping_dict['01:198:142 - 1']
+    print(weight_mapping)
+    category_columns = {key: [] for key in weight_mapping.keys()}
+    
+    # Iterate over the columns and add them to the corresponding category
+    for col in grade_netid.columns:
+        for key in weight_mapping.keys():
+            if key.lower() in col.lower():
+                category_columns[key].append(col)
+                break
+
+    # Convert filtered data to JSON format for each category
     filtered_json = grade_netid.to_json(orient='records')
-    return render_template('flexigrade.html', grades=filtered_json, quizzes=grade_netid_quiz, medium=grade_netid_medium, heavy=grade_netid_heavy)
+    # Create a nested dictionary structure for category_json
+    category_json = {}
+    for key, cols in category_columns.items():
+        category_json[key] = grade_netid[cols].to_dict(orient='records')
+
+    filtered_json = [grade_netid.to_json(orient='records')]
+    return render_template('flexigrade.html', weight_mapping=weight_mapping, name=grade_netid['Student'].values[0], netid=grade_netid['SIS Login ID'].values[0], oldgrades=filtered_json, grades=category_json)
 
 # Route for loading grades of logged in student
 @app.route('/loadgrades', methods=['GET'])

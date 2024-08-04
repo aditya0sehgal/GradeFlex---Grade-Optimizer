@@ -4,3 +4,4 @@ datasets
 instance
 practice.py
 convert_grades.py
+.env
