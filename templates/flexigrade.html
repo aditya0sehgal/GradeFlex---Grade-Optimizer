@@ -36,298 +36,237 @@
                     var doc = new jsPDF()
                     let tokens = 0;
                     var grades = '{{grades | tojson | safe}}'
+                    grades = JSON.parse(grades)
+                    console.log(grades);
+                    let name = '{{name}}'
+                    let id = '{{netid}}'
+                    console.log(name, id);
+                    let weight_mapping = '{{weight_mapping | tojson | safe}}'
+                    weight_mapping = JSON.parse(weight_mapping)
+                    console.log(weight_mapping);
+                    let current_student = {}
 
-                    var current_student = JSON.parse(grades.slice(2, -2))
-                    console.log(current_student);
-
-                    let quizzes = {};
-                    let assignments = {};
-                    let heavy = {};
-                    for (const key in current_student) {
-                        if (key.toLowerCase().includes('standard')) {
-                            quizzes[key] = current_student[key];
+                    let total_no_of_weighted_assignments = 0;
+                    for (const key in grades) {
+                        console.log(key, weight_mapping[key], grades[key]);
+                        if(grades[key].length === 0) {
+                            delete weight_mapping[key];
+                            continue;
                         }
-                        else if (key.toLowerCase().includes('heavy')) {
-                            heavy[key] = current_student[key];
-                        }
-                        else {
-                            assignments[key] = current_student[key];
+                        total_no_of_weighted_assignments += weight_mapping[key]*Object.keys(grades[key]).length;
+                        
+                        console.log(weight_mapping[key]*Object.keys(grades[key]).length); 
+                        for (const key2 in grades[key]) {
+                            console.log(key2+" : "+grades[key][key2]); 
                         }
                     }
-                    delete assignments['Student'];
-                    delete assignments["SIS Login ID"];
-                    console.log(quizzes, assignments, heavy);
+                    console.log(total_no_of_weighted_assignments);
 
-                    let weightperquiz = parseFloat(100 / (Object.keys(quizzes).length + (2*(Object.keys(assignments).length))  + (3*(Object.keys(heavy).length))))
-                    weightperassignment = 2*(weightperquiz)
-                    weightperheavy = 3*(weightperquiz)
+                    let standardweight = parseFloat(100 / total_no_of_weighted_assignments)
 
                     var defaultweight = document.getElementById('defaultweight')
-                    var initweights = 'Standard weight ~= '+parseFloat(weightperquiz).toFixed(2)+' % || '
-                    initweights += ' Medium weight ~= '+parseFloat(2*weightperquiz).toFixed(2)+' % || '
-                    initweights += ' Heavy weight ~= '+parseFloat(3*weightperquiz).toFixed(2)+' % '
+                    var linecounter = 0;
+                    var initweights = ''
+                    for (const key in weight_mapping) {
+                        initweights += `${key} weight ~= `.toUpperCase() + parseFloat(weight_mapping[key] * (standardweight)).toFixed(2)+` %  ||  `
+                        linecounter += 1;
+                        if(linecounter == 3){
+                            initweights += '<br>'
+                            initweights += '<br>'
+                            linecounter = 0;
+                        }
+                    }
                     defaultweight.innerHTML = initweights
 
-                    document.getElementById("name_netid").innerHTML = "<b>Name : </b> "+current_student['Student']+"  --  <b> NetID : </b> "+current_student['SIS Login ID']
+                    document.getElementById("name_netid").innerHTML = "<b>Name : </b> "+name+"  ---  <b> NetID : </b> "+id
+                    
+                    // for the updated code
+                    for (const type in grades) {
+                        let current_type_assignments = grades[type]
+                        console.log(type, weight_mapping[type], current_type_assignments);
+                        for (const assignment in current_type_assignments) {
+                            console.log(current_type_assignments[assignment]); 
+                            // each assignment is an object with multiple fields
+                            let current_assignment = current_type_assignments[assignment]
+                            current_student[current_assignment['assignment_name']] = current_assignment['percentage']
+                            console.log(current_student);
+                            var label = document.createElement("label");
+                            label.setAttribute("for", current_assignment['assignment_name']);
+                            label.appendChild(document.createTextNode(current_assignment['assignment_name'].split('(')[0] + ` - ${type.toUpperCase()} `));
 
-                    let name = current_student['Student'];
-                    let id = current_student['SIS Login ID'];
-                    delete current_student['Student'];
-                    delete current_student["SIS Login ID"];
+                            var input = document.createElement("input");
+                            input.setAttribute("type", "range");
+                            input.setAttribute("id", current_assignment['assignment_name']);
+                            input.setAttribute("name", current_assignment['assignment_name']);
+                            input.setAttribute("min", 0.7495*weight_mapping[type]*parseFloat(standardweight));
+                            input.setAttribute("max", 1.2505*weight_mapping[type]*parseFloat(standardweight));
+                            input.setAttribute("step", 0.25*weight_mapping[type]*parseFloat(standardweight).toFixed(4));
+                            input.setAttribute("value", weight_mapping[type]*parseFloat(standardweight));
+                            input.setAttribute("onchange", "updateOutput('" + current_assignment['assignment_name'] + "')");
 
-                    Object.keys(current_student).forEach(function(key) {
-                                        // Create elements for each quiz
-                                            if(Object.keys(quizzes).includes(key)){
-                                            var label = document.createElement("label");
-                                            label.setAttribute("for", key);
-                                            label.appendChild(document.createTextNode(key.split('(')[0] + "  - Standard "));
+                            var gradeoutput = document.createElement("output");
+                            gradeoutput.setAttribute("for", current_assignment['assignment_name']);
+                            gradeoutput.setAttribute("id", "output" + current_assignment['assignment_name']);
+                            gradeoutput.appendChild(document.createTextNode((current_assignment['percentage']*100).toFixed(2) + " %"));
 
-                                            var input = document.createElement("input");
-                                            input.setAttribute("type", "range");
-                                            input.setAttribute("id", key);
-                                            input.setAttribute("name", key);
-                                            input.setAttribute("min", 0.7495*parseFloat(weightperquiz));
-                                            input.setAttribute("max", 1.2505*parseFloat(weightperquiz));
-                                            input.setAttribute("step", 0.25*parseFloat(weightperquiz).toFixed(4));
-                                            input.setAttribute("value", weightperquiz);
-                                            input.setAttribute("onchange", "updateOutput('" + key + "')");
+                            var weightoutput = document.createElement("output");
+                            weightoutput.setAttribute("for", current_assignment['assignment_name']);
+                            weightoutput.setAttribute("id", "output" + current_assignment['assignment_name']);
+                            weightoutput.appendChild(document.createTextNode(" Maximize weight"));
 
-                                            var gradeoutput = document.createElement("output");
-                                            gradeoutput.setAttribute("for", key);
-                                            gradeoutput.setAttribute("id", "output" + key);
-                                            gradeoutput.appendChild(document.createTextNode((current_student[key]*100).toFixed(2) + " %"));
+                            // Append the elements to the form
+                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
+                            document.getElementById("sliderFormauto").appendChild(label);
+                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
+                            document.getElementById("sliderFormauto").appendChild(document.createTextNode("Minimize weight "));
+                            document.getElementById("sliderFormauto").appendChild(input);
+                            document.getElementById("sliderFormauto").appendChild(weightoutput);
+                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
+                            document.getElementById("sliderFormauto").appendChild(document.createTextNode("Your assignment grade : "));
+                            document.getElementById("sliderFormauto").appendChild(gradeoutput);
+                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
+                        }
+                    }
 
-                                            var weightoutput = document.createElement("output");
-                                            weightoutput.setAttribute("for", key);
-                                            weightoutput.setAttribute("id", "output" + key);
-                                            weightoutput.appendChild(document.createTextNode(" Maximize weight"));
 
-                                            // Append the elements to the form
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(label);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(document.createTextNode("Minimize weight "));
-                                            document.getElementById("sliderFormauto").appendChild(input);
-                                            document.getElementById("sliderFormauto").appendChild(weightoutput);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(document.createTextNode("Your assignment grade : "));
-                                            document.getElementById("sliderFormauto").appendChild(gradeoutput);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            }
-                                            else if(Object.keys(assignments).includes(key)){
-                                            var label = document.createElement("label");
-                                            label.setAttribute("for", key);
-                                            label.appendChild(document.createTextNode(key.split('(')[0] + "  - Medium "));
+                    // See Github to see 
+                    // old code for reference
+                    function updateOutput(sliderId) {
+                        var slider = document.getElementById(sliderId);
 
-                                            var input = document.createElement("input");
-                                            input.setAttribute("type", "range");
-                                            input.setAttribute("id", key);
-                                            input.setAttribute("name", key);
-                                            input.setAttribute("min", 0.7495*weightperassignment);
-                                            input.setAttribute("max", 1.2505*weightperassignment);
-                                            input.setAttribute("step", 0.25*(parseFloat(weightperassignment).toFixed(4)));
-                                            input.setAttribute("value", weightperassignment);
-                                            input.setAttribute("onchange", "updateOutput('" + key + "')");
+                        var sliders = document.querySelectorAll('input[type="range"]');
+                        var total = 0;
+                        var finalgrade = 0
 
-                                            var gradeoutput = document.createElement("output");
-                                            gradeoutput.setAttribute("for", key);
-                                            gradeoutput.setAttribute("id", "output" + key);
-                                            gradeoutput.appendChild(document.createTextNode((current_student[key]*100).toFixed(2) + " %"));
+                        sliders.forEach(function(sld) {
+                            total += parseFloat(sld.value);
+                        });
 
-                                            var weightoutput = document.createElement("output");
-                                            weightoutput.setAttribute("for", key);
-                                            weightoutput.setAttribute("id", "output" + key);
-                                            weightoutput.appendChild(document.createTextNode(" Maximize weight"));
-                                            // weightoutput.appendChild(document.createTextNode(weightperassignment + " %"));
+                        var formData = {};
 
-                                            // Append the elements to the form
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(label);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(document.createTextNode(" Minimize weight"));
-                                            document.getElementById("sliderFormauto").appendChild(input);
-                                            document.getElementById("sliderFormauto").appendChild(weightoutput);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(document.createTextNode("Your assignment grade : "));
-                                            document.getElementById("sliderFormauto").appendChild(gradeoutput);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            }
-                                            else if(Object.keys(heavy).includes(key)){
-                                            var label = document.createElement("label");
-                                            label.setAttribute("for", key);
-                                            label.appendChild(document.createTextNode(key.split('(')[0] + "  - Heavy "));
+                        // Iterate over the keys in filteredData
+                        Object.keys(current_student).forEach(function(key) {
+                                var inputValue = document.getElementById(key).value;
+                                formData[key] = inputValue+"-"+current_student[key];
+                                finalgrade += current_student[key] * inputValue;
+                        });
 
-                                            var input = document.createElement("input");
-                                            input.setAttribute("type", "range");
-                                            input.setAttribute("id", key);
-                                            input.setAttribute("name", key);
-                                            input.setAttribute("min", 0.7495*weightperheavy);
-                                            input.setAttribute("max", 1.2505*weightperheavy);
-                                            input.setAttribute("step", 0.25*parseFloat(weightperheavy).toFixed(4));
-                                            input.setAttribute("value", weightperheavy);
-                                            input.setAttribute("onchange", "updateOutput('" + key + "')");
+                        // Log or process formData as needed
 
-                                            var gradeoutput = document.createElement("output");
-                                            gradeoutput.setAttribute("for", key);
-                                            gradeoutput.setAttribute("id", "output" + key);
-                                            gradeoutput.appendChild(document.createTextNode((current_student[key]*100).toFixed(2) + " %"));
+                        tokens = ((total - 100)/(0.25*standardweight)).toFixed(0)
 
-                                            var weightoutput = document.createElement("output");
-                                            weightoutput.setAttribute("for", key);
-                                            weightoutput.setAttribute("id", "output" + key);
-                                            weightoutput.appendChild(document.createTextNode(" Maximize weight"));
-                                            // weightoutput.appendChild(document.createTextNode(weightperassignment + " %"));
+                        if(tokens == '-0' || tokens == '0') {
+                            total_weight_top.innerHTML = "Token Balance : " + '0' + " tokens"
+                            total_weight.innerHTML = "Token Balance : " + '0' + " tokens"
+                        } else{
+                            total_weight_top.innerHTML = "Token Balance : " + tokens + " tokens"
+                            total_weight.innerHTML = "Token Balance : " + tokens + " tokens"
+                        }
 
-                                            // Append the elements to the form
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(label);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(document.createTextNode(" Minimize weight"));
-                                            document.getElementById("sliderFormauto").appendChild(input);
-                                            document.getElementById("sliderFormauto").appendChild(weightoutput);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            document.getElementById("sliderFormauto").appendChild(document.createTextNode("Your assignment grade : "));
-                                            document.getElementById("sliderFormauto").appendChild(gradeoutput);
-                                            document.getElementById("sliderFormauto").appendChild(document.createElement("br"));
-                                            }
-                                        });
+                    }
 
-                                    function updateOutput(sliderId) {
-                                        var slider = document.getElementById(sliderId);
+                    function checkForm() {
+                        var sliders = document.querySelectorAll('input[type="range"]');
+                        var total = 0;
+                        var finalgrade = 0
 
-                                        var sliders = document.querySelectorAll('input[type="range"]');
-                                        var total = 0;
-                                        var finalgrade = 0
+                        sliders.forEach(function(slider) {
+                            total += parseFloat(slider.value);
+                        });
 
-                                        sliders.forEach(function(sld) {
-                                            total += parseFloat(sld.value);
-                                        });
+                        var formData = {};
 
-                                        var formData = {};
+                        // Iterate over the keys in filteredData
+                        Object.keys(current_student).forEach(function(key) {
+                                var inputValue = document.getElementById(key).value;
+                                formData[key] = inputValue+"-"+current_student[key];
+                                finalgrade += current_student[key] * inputValue;
+                        });
 
-                                        // Iterate over the keys in filteredData
-                                        Object.keys(current_student).forEach(function(key) {
-                                                var inputValue = document.getElementById(key).value;
-                                                formData[key] = inputValue+"-"+current_student[key];
-                                                finalgrade += current_student[key] * inputValue;
-                                        });
+                        // Log or process formData as needed
 
-                                        // Log or process formData as needed
+                        if (parseInt(total.toFixed(0)) !== 100) {
+                            alert('Please make sure the Token Balance = 0');
+                        } else {
+                            alert('Great! Token Balance = 0. Final grade : '+Math.floor(finalgrade.toFixed(2)))
+                        }
+                    }
 
-                                        tokens = ((total - 100)/(0.25*weightperquiz)).toFixed(0)
+                    function submitForm() {
+                        var sliders = document.querySelectorAll('input[type="range"]');
+                        var total = 0;
+                        var finalgrade = 0
 
-                                        if(tokens == '-0' || tokens == '0') {
-                                            total_weight_top.innerHTML = "Token Balance : " + '0' + " tokens"
-                                            total_weight.innerHTML = "Token Balance : " + '0' + " tokens"
-                                        } else{
-                                            total_weight_top.innerHTML = "Token Balance : " + tokens + " tokens"
-                                            total_weight.innerHTML = "Token Balance : " + tokens + " tokens"
-                                        }
+                        sliders.forEach(function(slider) {
+                            total += parseFloat(slider.value);
+                        });
 
-                                    }
+                        var formData = {};
 
-                                    function checkForm() {
-                                        var sliders = document.querySelectorAll('input[type="range"]');
-                                        var total = 0;
-                                        var finalgrade = 0
+                        // Iterate over the keys in filteredData
+                        Object.keys(current_student).forEach(function(key) {
 
-                                        sliders.forEach(function(slider) {
-                                            total += parseFloat(slider.value);
-                                        });
+                            var inputValue = document.getElementById(key).value;
+                            formData[key] = inputValue+"-"+current_student[key];
+                            finalgrade += current_student[key] * inputValue;
 
-                                        var formData = {};
+                        });
 
-                                        // Iterate over the keys in filteredData
-                                        Object.keys(current_student).forEach(function(key) {
-                                                var inputValue = document.getElementById(key).value;
-                                                formData[key] = inputValue+"-"+current_student[key];
-                                                finalgrade += current_student[key] * inputValue;
-                                        });
+                        if (parseInt(total.toFixed(0)) !== 100) {
+                            alert('Please make sure the Token Balance = 0');
+                        } else {
+                            alert('Final grade : '+ Math.floor(finalgrade.toFixed(2)) + ' The pdf will be downloaded soon.');
+                            doc.setFontSize(60);
+                            doc.setTextColor(220,220,220);
+                            doc.text("GradeFlex", 70, 180, {"charSpace" : 2, "angle": 45}, 0);
 
-                                        // Log or process formData as needed
+                            let y = 10;
+                            doc.setFontStyle("bold")
+                            doc.setFontSize(10);
+                            doc.setTextColor(255, 255, 255);
+                            doc.text("Data-101", 1, y, {"charSpace" : 0, "angle": 0}, 0);
+                            doc.setFontSize(15);
+                            doc.setTextColor(0, 0, 0);
+                            doc.text("NetID : "+id, 10, y, {"charSpace" : 0, "angle": 0}, 0);
+                            doc.text("Name : "+name, 80, y);
+                            doc.setFontStyle("normal")
+                            y = 20
+                            doc.setFontSize(10);
+                            Object.keys(formData).forEach(function(key) {
+                                doc.setFontStyle("bold")
+                                doc.text(key.split('(')[0], 10, y);
+                                y += 5
+                                doc.setFontStyle("normal")
+                                doc.text("Adjusted Assignment weight : "+parseFloat(formData[key].split('-')[0]).toFixed(2) +"%"+"    Grade obtained : "+(formData[key].split('-')[1]*100).toFixed(2)+"%", 10, y);
+                                y += 8
+                            })
+                            doc.line(10, y-5, 160, y-5);
+                            doc.setFontStyle("bold")
+                            doc.text("Final Adjusted Grade : " + finalgrade.toFixed(2), 10, y+1);
+                            doc.line(10, y+5, 160, y+5);
+                            // document.getElementById('sliderFormauto').submit();
+                            doc.save(name+"-"+id+".pdf");
+                            doc = new jsPDF()
+                        }
+                    }
 
-                                        if (parseInt(total.toFixed(0)) !== 100) {
-                                            alert('Please make sure the Token Balance = 0');
-                                        } else {
-                                            alert('Great! Token Balance = 0. Final grade : '+Math.floor(finalgrade.toFixed(2)))
-                                        }
-                                    }
+                    async function logout() {
+                        const response = await fetch('/logout', {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                        });
+                        const result = await response.json();
+                        if(response.ok) {
+                            alert('Logout Successful');
+                            // Redirect user or update UI accordingly
+                            window.location.href = result.redirect;
 
-                                    function submitForm() {
-                                        var sliders = document.querySelectorAll('input[type="range"]');
-                                        var total = 0;
-                                        var finalgrade = 0
-
-                                        sliders.forEach(function(slider) {
-                                            total += parseFloat(slider.value);
-                                        });
-
-                                        var formData = {};
-
-                                        // Iterate over the keys in filteredData
-                                        Object.keys(current_student).forEach(function(key) {
-
-                                            var inputValue = document.getElementById(key).value;
-                                            formData[key] = inputValue+"-"+current_student[key];
-                                            finalgrade += current_student[key] * inputValue;
-
-                                        });
-
-                                        if (parseInt(total.toFixed(0)) !== 100) {
-                                            alert('Please make sure the Token Balance = 0');
-                                        } else {
-                                            alert('Final grade : '+ Math.floor(finalgrade.toFixed(2)) + ' The pdf will be downloaded soon.');
-                                            doc.setFontSize(60);
-                                            doc.setTextColor(220,220,220);
-                                            doc.text("GradeFlex", 70, 180, {"charSpace" : 2, "angle": 45}, 0);
-
-                                            let y = 10;
-                                            doc.setFontStyle("bold")
-                                            doc.setFontSize(10);
-                                            doc.setTextColor(255, 255, 255);
-                                            doc.text("SP24", 1, y, {"charSpace" : 0, "angle": 0}, 0);
-                                            doc.setFontSize(15);
-                                            doc.setTextColor(0, 0, 0);
-                                            doc.text("NetID : "+id, 10, y, {"charSpace" : 0, "angle": 0}, 0);
-                                            doc.text("Name : "+name, 80, y);
-                                            doc.setFontStyle("normal")
-                                            y = 20
-                                            doc.setFontSize(10);
-                                            Object.keys(formData).forEach(function(key) {
-                                                doc.setFontStyle("bold")
-                                                doc.text(key.split('(')[0], 10, y);
-                                                y += 5
-                                                doc.setFontStyle("normal")
-                                                doc.text("Adjusted Assignment weight : "+parseFloat(formData[key].split('-')[0]).toFixed(2) +"%"+"    Grade obtained : "+(formData[key].split('-')[1]*100).toFixed(2)+"%", 10, y);
-                                                y += 8
-                                            })
-                                            doc.line(10, y-5, 160, y-5);
-                                            doc.setFontStyle("bold")
-                                            doc.text("Final Adjusted Grade : " + Math.floor(finalgrade.toFixed(2)), 10, y+1);
-                                            doc.line(10, y+5, 160, y+5);
-                                            // document.getElementById('sliderFormauto').submit();
-                                            doc.save(name+"-"+id+".pdf");
-                                            doc = new jsPDF()
-                                        }
-                                    }
-
-                                    async function logout() {
-                                        const response = await fetch('/logout', {
-                                            method: 'GET',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                            },
-                                        });
-                                        const result = await response.json();
-                                        if(response.ok) {
-                                            alert('Logout Successful');
-                                            // Redirect user or update UI accordingly
-                                            window.location.href = result.redirect;
-
-                                        } else {
-                                            alert(result.error);
-                                        }
-                                    };
+                        } else {
+                            alert(result.error);
+                        }
+                    };
                 </script>
                 <hr>
                 <h3><i><span id="total_weight">Token Balance : 0 tokens</span></i></h3>
