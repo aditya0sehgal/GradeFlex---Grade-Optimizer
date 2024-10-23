@@ -6,15 +6,18 @@ import pandas as pd
 import numpy as np
 import os
 import bcrypt
+import requests
+from dotenv import dotenv_values
 
 # Initialize Flask application
 app = Flask(__name__)
+env_values = dotenv_values(".env")
 # Configuration for SQLAlchemy database URI pointing to a SQLite database
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
 # Disabling the modification tracking feature of SQLAlchemy to improve performance
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Secret key for securely signing the session cookie. This should be securely managed in production.
-app.config['SECRET_KEY'] = 'secret'
+app.config['SECRET_KEY'] = env_values["SECRET_KEY"]
 # Directory to save uploaded datasets and allowed file types
 app.config['UPLOAD_FOLDER'] = 'datasets'
 app.config['ALLOWED_EXTENSIONS'] = {'csv'}
@@ -22,6 +25,9 @@ app.config['ALLOWED_EXTENSIONS'] = {'csv'}
 # Initialize SQLAlchemy with Flask app settings
 db = SQLAlchemy(app)
 course_weight_mapping_dict = {}
+access_token = env_values["CANVAS_ACCESS_TOKEN"]
+canvas_url = env_values["CANVAS_URL"]
+COURSE_ID = env_values["DATA_101_COURSEID"]
 
 # Route for the home page, which renders an HTML template
 @app.route("/", methods=['GET'])
@@ -54,6 +60,52 @@ def get_weight_mappings():
         course_section_dict[course + " - " + str(section)] = weight_dict
 
     return course_section_dict
+
+# Function to fetch student data from Canvas
+def fetch_canvas_data(netid):
+    headers = {
+        "Authorization": "Bearer " + access_token
+    }
+
+    # Fetch student netid and name mapping
+    print(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students")
+    response = requests.get(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students", headers=headers)
+    student_netid_id_and_name_mapping = {}
+
+    if response.status_code == 200:
+        result = response.json()
+        
+        for student in result:
+            if student.get('sis_user_id'):
+                student_netid_id_and_name_mapping[student.get('sis_user_id')] = [student.get('id'), student.get('name')]
+    else:
+        raise Exception("Error fetching student data: " + str(response.status_code))
+    print(student_netid_id_and_name_mapping)
+    student_id = student_netid_id_and_name_mapping.get(netid)[0]
+    print(student_id)
+    # Fetch student grades
+    response = requests.get(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students/submissions?student_ids[]="+str(student_id)+"&grouped=true&include[]=assignment&per_page=20", headers=headers)
+    all_student_grades = []
+
+    if response.status_code == 200:
+        current_students = response.json()
+        
+        for student in current_students:
+            if student.get('sis_user_id'):
+                all_student_grades.append(student)
+        
+        while response.links['current']['url'] != response.links['last']['url']:
+            response = requests.get(response.links['next']['url'], headers=headers)
+            current_students = response.json()
+            for student in current_students:
+                if student.get('sis_user_id'):
+                    all_student_grades.append(student)
+    else:
+        raise Exception("Error fetching grades: " + str(response.status_code))
+    print(student_netid_id_and_name_mapping.get(netid)[1])
+    return [all_student_grades, student_netid_id_and_name_mapping.get(netid)[1]]
+
+
 
 # Route for uploading and converting datasets
 @app.route('/upload', methods=['GET', 'POST'])
@@ -178,9 +230,60 @@ def loaddemogrades():
     filtered_json = [grade_netid.to_json(orient='records')]
     return render_template('flexigrade.html', weight_mapping=weight_mapping, name=grade_netid['Student'].values[0], netid=grade_netid['SIS Login ID'].values[0], oldgrades=filtered_json, grades=category_json)
 
-# Route for loading grades of logged in student
-@app.route('/loadgrades', methods=['GET'])
+@app.route('/loadgrades', methods=['POST'])
 def loadgrades():
+    global course_weight_mapping_dict
+    
+    netid = request.form['netid']
+    print(netid)
+    # Fetch and integrate Canvas data
+    try:
+        canvas_data, name = fetch_canvas_data(netid)
+        canvas_grades = []
+        for student in canvas_data:
+            if student.get('sis_user_id') == netid:
+                for assignment in student.get('submissions'):
+                    if assignment.get('score') is not None and assignment.get('assignment').get('points_possible') != 0.0:
+                        canvas_grades.append({
+                            'assignment_name': assignment.get('assignment').get('name'),
+                            'assignment_id': assignment.get('assignment_id'),
+                            'score': assignment.get('score'),
+                            'points_possible': assignment.get('assignment').get('points_possible'),
+                            'percentage': f"{assignment.get('score') / assignment.get('assignment').get('points_possible'):.2f}"
+                        })
+    except Exception as e:
+        return jsonify({"message": f"There was an error fetching Canvas data: {e}"}), 500
+    print(canvas_grades)
+
+    # Assume course code and section are known or can be inferred
+    course_code = '01:198:142'
+    section = '1'
+
+    try:
+        course_weight_mapping_dict = get_weight_mappings()
+        weight_mapping = course_weight_mapping_dict[f'{course_code} - {section}']
+    except Exception as e:
+        return jsonify({"message": f"There was an error: {e}"}), 500
+
+    category_columns = {key: [] for key in weight_mapping.keys()}
+    
+    # Process Canvas grades to fit the structure
+    for grade in canvas_grades:
+        for key in weight_mapping.keys():
+            if key.lower() in grade['assignment_name'].lower():
+                category_columns[key].append(grade)
+                break
+
+    category_json = {}
+    for key, grades in category_columns.items():
+        category_json[key] = grades
+
+    return render_template('flexigrade.html', weight_mapping=weight_mapping, name=name, netid=netid, grades=category_json)
+
+
+# Route for loading grades of logged in student
+@app.route('/loadgrades-test', methods=['GET'])
+def loadgradestest():
     netid = session.get('netid')
     if netid:
         if os.path.isfile(os.path.join(os.getcwd() + '/datasets/allgrades.csv')):
