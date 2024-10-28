@@ -68,7 +68,7 @@ def fetch_canvas_data(netid):
     }
 
     # Fetch student netid and name mapping
-    print(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students")
+    # print(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students")
     response = requests.get(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students", headers=headers)
     student_netid_id_and_name_mapping = {}
 
@@ -80,9 +80,9 @@ def fetch_canvas_data(netid):
                 student_netid_id_and_name_mapping[student.get('sis_user_id')] = [student.get('id'), student.get('name')]
     else:
         raise Exception("Error fetching student data: " + str(response.status_code))
-    print(student_netid_id_and_name_mapping)
+    # print(student_netid_id_and_name_mapping)
     student_id = student_netid_id_and_name_mapping.get(netid)[0]
-    print(student_id)
+    # print(student_id)
     # Fetch student grades
     response = requests.get(canvas_url + "/api/v1/courses/"+COURSE_ID+"/students/submissions?student_ids[]="+str(student_id)+"&grouped=true&include[]=assignment&per_page=20", headers=headers)
     all_student_grades = []
@@ -102,7 +102,7 @@ def fetch_canvas_data(netid):
                     all_student_grades.append(student)
     else:
         raise Exception("Error fetching grades: " + str(response.status_code))
-    print(student_netid_id_and_name_mapping.get(netid)[1])
+    # print(student_netid_id_and_name_mapping.get(netid)[1])
     return [all_student_grades, student_netid_id_and_name_mapping.get(netid)[1]]
 
 
@@ -210,7 +210,7 @@ def loaddemogrades():
     # This could maybe be done in the get_weight_mappings function itself.
     # By passing the course code as an argument.
     weight_mapping = course_weight_mapping_dict['01:198:142 - 1']
-    print(weight_mapping)
+    # print(weight_mapping)
     category_columns = {key: [] for key in weight_mapping.keys()}
     
     # Iterate over the columns and add them to the corresponding category
@@ -230,12 +230,14 @@ def loaddemogrades():
     filtered_json = [grade_netid.to_json(orient='records')]
     return render_template('flexigrade.html', weight_mapping=weight_mapping, name=grade_netid['Student'].values[0], netid=grade_netid['SIS Login ID'].values[0], oldgrades=filtered_json, grades=category_json)
 
-@app.route('/loadgrades', methods=['POST'])
+@app.route('/loadgrades', methods=['GET'])
 def loadgrades():
     global course_weight_mapping_dict
     
-    netid = request.form['netid']
-    print(netid)
+    netid = session.get('netid')
+    if not netid:
+        return render_template('login.html', message="Please login to view grades")
+    
     # Fetch and integrate Canvas data
     try:
         canvas_data, name = fetch_canvas_data(netid)
@@ -253,7 +255,7 @@ def loadgrades():
                         })
     except Exception as e:
         return jsonify({"message": f"There was an error fetching Canvas data: {e}"}), 500
-    print(canvas_grades)
+    # print(canvas_grades)
 
     # Assume course code and section are known or can be inferred
     course_code = '01:198:142'
@@ -284,20 +286,51 @@ def loadgrades():
 # Route for loading grades of logged in student
 @app.route('/loadgrades-test', methods=['GET'])
 def loadgradestest():
-    netid = session.get('netid')
-    if netid:
-        if os.path.isfile(os.path.join(os.getcwd() + '/datasets/allgrades.csv')):
-            gradesDF = pd.read_csv(os.path.join(os.getcwd() + '/datasets/allgrades.csv'))
-        grade_netid = gradesDF[gradesDF['SIS Login ID'] == netid]
+    global course_weight_mapping_dict
+    netid = "scd152"
+    # Fetch and integrate Canvas data
+    try:
+        canvas_data, name = fetch_canvas_data(netid)
+        canvas_grades = []
+        for student in canvas_data:
+            if student.get('sis_user_id') == netid:
+                for assignment in student.get('submissions'):
+                    if assignment.get('score') is not None and assignment.get('assignment').get('points_possible') != 0.0:
+                        canvas_grades.append({
+                            'assignment_name': assignment.get('assignment').get('name'),
+                            'assignment_id': assignment.get('assignment_id'),
+                            'score': assignment.get('score'),
+                            'points_possible': assignment.get('assignment').get('points_possible'),
+                            'percentage': f"{(assignment.get('score')/ assignment.get('assignment').get('points_possible') - 0.1):.2f}"
+                        })
+    except Exception as e:
+        return jsonify({"message": f"There was an error fetching Canvas data: {e}"}), 500
+    # print(canvas_grades)
 
-        grade_netid_quiz = [col for col in grade_netid.columns if 'quiz' in col.lower()]
-        grade_netid_heavy = [col for col in grade_netid.columns if 'heavy' in col.lower()]
-        grade_netid_medium = [col for col in grade_netid.columns if ('quiz' not in col.lower() and 'heavy' not in col.lower())][2:]       
-        
-        filtered_json = grade_netid.to_json(orient='records')
-        return render_template('flexigrade.html', grades=filtered_json, quizzes=grade_netid_quiz, medium=grade_netid_medium, heavy=grade_netid_heavy)
-    else:
-        return render_template('notloggedin.html')
+    # Assume course code and section are known or can be inferred
+    course_code = '01:198:142'
+    section = '1'
+
+    try:
+        course_weight_mapping_dict = get_weight_mappings()
+        weight_mapping = course_weight_mapping_dict[f'{course_code} - {section}']
+    except Exception as e:
+        return jsonify({"message": f"There was an error: {e}"}), 500
+
+    category_columns = {key: [] for key in weight_mapping.keys()}
+    
+    # Process Canvas grades to fit the structure
+    for grade in canvas_grades:
+        for key in weight_mapping.keys():
+            if key.lower() in grade['assignment_name'].lower():
+                category_columns[key].append(grade)
+                break
+
+    category_json = {}
+    for key, grades in category_columns.items():
+        category_json[key] = grades
+
+    return render_template('flexigrade.html', weight_mapping=weight_mapping, name="Demo User", netid="Demo NetID", grades=category_json)
 
 # SQLAlchemy User model for storing user credentials
 class User(db.Model):
@@ -404,7 +437,7 @@ def login():
         else:
             if user and bcrypt.checkpw(password, user.password):
                 session['netid'] = username
-                return jsonify({"message": "Login successful", "redirect": "/loadgrades"}), 200
+                return jsonify({"message": "Login successful. Loading your grades...", "redirect": "/loadgrades"}), 200
             elif user:
                 return jsonify({"error": "Incorrect password"}), 401
             else:

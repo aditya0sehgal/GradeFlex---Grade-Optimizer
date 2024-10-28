@@ -37,30 +37,30 @@
                     let tokens = 0;
                     var grades = '{{grades | tojson | safe}}'
                     grades = JSON.parse(grades)
-                    console.log(grades);
+                    // console.log(grades);
                     let name = '{{name}}'
                     let id = '{{netid}}'
-                    console.log(name, id);
+                    // console.log(name, id);
                     let weight_mapping = '{{weight_mapping | tojson | safe}}'
                     weight_mapping = JSON.parse(weight_mapping)
-                    console.log(weight_mapping);
+                    // console.log(weight_mapping);
                     let current_student = {}
 
                     let total_no_of_weighted_assignments = 0;
                     for (const key in grades) {
-                        console.log(key, weight_mapping[key], grades[key]);
+                        // console.log(key, weight_mapping[key], grades[key]);
                         if(grades[key].length === 0) {
                             delete weight_mapping[key];
                             continue;
                         }
                         total_no_of_weighted_assignments += weight_mapping[key]*Object.keys(grades[key]).length;
                         
-                        console.log(weight_mapping[key]*Object.keys(grades[key]).length); 
-                        for (const key2 in grades[key]) {
-                            console.log(key2+" : "+grades[key][key2]); 
-                        }
+                        // console.log(weight_mapping[key]*Object.keys(grades[key]).length); 
+                        // for (const key2 in grades[key]) {
+                        //     console.log(key2+" : "+grades[key][key2]); 
+                        // }
                     }
-                    console.log(total_no_of_weighted_assignments);
+                    // console.log(total_no_of_weighted_assignments);
 
                     let standardweight = parseFloat(100 / total_no_of_weighted_assignments)
 
@@ -83,13 +83,13 @@
                     // for the updated code
                     for (const type in grades) {
                         let current_type_assignments = grades[type]
-                        console.log(type, weight_mapping[type], current_type_assignments);
+                        // console.log(type, weight_mapping[type], current_type_assignments);
                         for (const assignment in current_type_assignments) {
-                            console.log(current_type_assignments[assignment]); 
+                            // console.log(current_type_assignments[assignment]); 
                             // each assignment is an object with multiple fields
                             let current_assignment = current_type_assignments[assignment]
                             current_student[current_assignment['assignment_name']] = current_assignment['percentage']
-                            console.log(current_student);
+                            // console.log(current_student);
                             var label = document.createElement("label");
                             label.setAttribute("for", current_assignment['assignment_name']);
                             label.appendChild(document.createTextNode(current_assignment['assignment_name'].split('(')[0] + ` - ${type.toUpperCase()} `));
